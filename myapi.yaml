@@ -64,7 +64,7 @@ Resources:
       Description: Trigger From SNS to send SES Mail
       FunctionName: ForSeSTrigger
       Handler: index.lambda_handler
-      Role: arn:aws:iam::344311110085:role/Lambda-Role-for-Cloud-Watch
+      Role: arn:aws:iam::34***********90:role/Lambda-Role-for-Cloud-Watch
       Runtime: python3.7
       Timeout: 60
 
@@ -96,7 +96,7 @@ Resources:
         Variables:
           SNSArn: !Ref SNSTopic
       Handler: index.lambda_handler
-      Role: arn:aws:iam::344311110085:role/Lambda-Role-for-Cloud-Watch
+      Role: arn:aws:iam::34***********90:role/Lambda-Role-for-Cloud-Watch
       Code: 
         ZipFile: !Sub |
           import json
