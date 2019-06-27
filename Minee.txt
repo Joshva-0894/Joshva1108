@@ -1,0 +1,25 @@
+KMS :-
+
+Access Key ID:
+AKIAIXB5QVZM3DTS4LLA
+Secret Access Key:
+Wbybzgr/IXK66x3Mx8uVgD+Wuq0MnOXUal8jYkKE
+
+
+
+
+To install Python and PIP
+
+To install Python = sudo yum install python3.7
+
+To gete pip : curl -O https://bootstrap.pypa.io/get-pip.py
+
+To install pip : python3 get-pip.py --user
+
+To view = whereis pip
+
+To install boto3 = sudo pip3 install boto3
+
+
+
+/home/ec2-user
