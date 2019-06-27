@@ -1,0 +1,178 @@
+AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  LambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        ZipFile: |
+          import boto3
+          from botocore.exceptions import ClientError
+
+          def lambda_handler(event, context):
+              
+              SENDER = "Joshva <joshva.m@8kmiles.com>"
+              RECIPIENT = "joshva.m@8kmiles.com"
+              AWS_REGION = "us-east-1"
+              SUBJECT = "CPU Utilization of WebServer"
+              BODY_TEXT = ("Amazon SES Mail\r\n"
+                       "This email was sent because the CPU utilizaation crossing threshold ZERO"
+                      )
+                      
+              BODY_HTML = """<html>
+              <head></head>
+              <body>
+                <h1>CPU Utilization</h1>
+                <p>CPU Utilization crossing Threshold Z E R O</a>.</p>
+              </body>
+              </html>
+                          """            
+              
+              CHARSET = "UTF-8"
+              
+              client = boto3.client('ses')
+              
+              try:
+                  response = client.send_email(
+                      Destination={
+                          'ToAddresses': [
+                              RECIPIENT,
+                          ],
+                      },
+                      Message={
+                          'Body': {
+                              'Html': {
+                                  'Charset': CHARSET,
+                                  'Data': BODY_HTML,
+                              },
+                              'Text': {
+                                  'Charset': CHARSET,
+                                  'Data': BODY_TEXT,
+                              },
+                          },
+                          'Subject': {
+                              'Charset': CHARSET,
+                              'Data': SUBJECT,
+                          },
+                      },
+                      Source=SENDER,
+                  )
+              except ClientError as e:
+                  print(e.response['Error']['Message'])
+              else:
+                  print("Email sent! Message ID:"),
+                  print(response['MessageId'])
+      Description: Trigger From SNS to send SES Mail
+      FunctionName: ForSeSTrigger
+      Handler: index.lambda_handler
+      Role: arn:aws:iam::344311110085:role/Lambda-Role-for-Cloud-Watch
+      Runtime: python3.7
+      Timeout: 60
+
+  LambdaPermission:
+      Type: 'AWS::Lambda::Permission'
+      Properties:
+        Action: 'lambda:InvokeFunction'
+        FunctionName: !Ref LambdaFunction
+        Principal: sns.amazonaws.com
+        SourceArn: !Ref SNSTopic    
+
+  SNSTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      DisplayName: Trigerring Lambda for Hitting SES mail
+      Subscription:
+        - Endpoint:  
+            Fn::GetAtt:
+              - "LambdaFunction"
+              - "Arn"
+          Protocol: lambda
+      TopicName: TrigerringLambdaforSES
+
+  lambdaFunction1:   
+    Type: AWS::Lambda::Function
+    Description: For getting Instance ID and creating CloudWatch Alarm
+    Properties:
+      Environment:
+        Variables:
+          SNSArn: !Ref SNSTopic
+      Handler: index.lambda_handler
+      Role: arn:aws:iam::344311110085:role/Lambda-Role-for-Cloud-Watch
+      Code: 
+        ZipFile: !Sub |
+          import json
+          import boto3  
+          import os
+
+          def lambda_handler(event, context):
+            ec2 = boto3.client('ec2', 'us-east-1')
+            response = ec2.describe_instances()
+            x = "ID Matched and Alarm Created Successfully"
+            Event_data = dict()
+            Event_data['Key'] = 'Owner'
+            Event_data['Value'] = 'Joshva'
+            for reservation_data in response['Reservations']:
+              for instance_data in reservation_data['Instances']:
+                  for tags_data in instance_data['Tags']:
+                    if Event_data  == tags_data:
+                      forID = instance_data['InstanceId']
+                      cloudwatch = boto3.client('cloudwatch')
+                      cloudwatch.put_metric_alarm(
+                        AlarmName='Web_Server_CPU_Utilization',
+                        ComparisonOperator='GreaterThanOrEqualToThreshold',
+                        EvaluationPeriods=1,
+                        MetricName='CPUUtilization',
+                        Namespace='AWS/EC2',
+                        Period=300,
+                        Statistic='Average',
+                        Threshold=0,
+                        ActionsEnabled=True,
+                        AlarmDescription='Alarm when server CPU exceeding 0%',
+                        TreatMissingData='missing',
+                        AlarmActions=[os.environ['SNSArn']],
+                        Dimensions=[
+                            {
+                              'Name': 'InstanceId',
+                              'Value': forID,
+                            },  
+                        ],
+                        Unit='Percent'
+                      )
+                      return x
+      Runtime: python3.7
+      Timeout: 60
+    
+  apigateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: My-API
+      EndpointConfiguration:
+        Types:
+          -   "REGIONAL"
+
+  ApiGatewayMethods:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      AuthorizationType: "NONE"
+      HttpMethod: "POST"
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: "AWS"
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations"
+          - lambdaArn: !GetAtt "lambdaFunction1.Arn"
+        IntegrationResponses:
+          - StatusCode: "200"
+      MethodResponses: 
+      - ResponseModels: 
+          application/json: Empty
+        StatusCode: "200"
+      ResourceId: !GetAtt "apigateway.RootResourceId"
+      RestApiId: !Ref "apigateway"
+
+  lambdaApiGatewayInvoke:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !GetAtt "lambdaFunction1.Arn"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${apigateway}/*/POST/"
